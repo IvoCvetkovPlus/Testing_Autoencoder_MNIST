@@ -45,3 +45,133 @@ encoder_output = layers.Dense(EMBEDDING_DIM, name="encoder_output")(x)
 
 encoder = models.Model(encoder_input, encoder_output)
 encoder.summary()
+
+autoencoder.compile(optimizer="adam", loss="binary_crossentropy")
+# Create a model save checkpoint
+model_checkpoint_callback = callbacks.ModelCheckpoint(
+    filepath="./checkpoint",
+    save_weights_only=False,
+    save_freq="epoch",
+    monitor="loss",
+    mode="min",
+    save_best_only=True,
+    verbose=0,
+)
+tensorboard_callback = callbacks.TensorBoard(log_dir="./logs")
+autoencoder.fit(
+    x_train,
+    x_train,
+    epochs=EPOCHS,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    validation_data=(x_test, x_test),
+    callbacks=[model_checkpoint_callback, tensorboard_callback],
+)
+# Save the final models
+autoencoder.save("./models/autoencoder")
+encoder.save("./models/encoder")
+decoder.save("./models/decoder")
+n_to_predict = 5000
+example_images = x_test[:n_to_predict]
+example_labels = y_test[:n_to_predict]
+predictions = autoencoder.predict(example_images)
+
+print("Example real clothing items")
+display(example_images)
+print("Reconstructions")
+display(predictions)
+
+
+# Encode the example images
+embeddings = encoder.predict(example_images)
+# Some examples of the embeddings
+print(embeddings[:10])
+# Show the encoded points in 2D space
+figsize = 8
+
+plt.figure(figsize=(figsize, figsize))
+plt.scatter(embeddings[:, 0], embeddings[:, 1], c="black", alpha=0.5, s=3)
+plt.show()
+# Colour the embeddings by their label (clothing type - see table)
+example_labels = y_test[:n_to_predict]
+
+figsize = 8
+plt.figure(figsize=(figsize, figsize))
+plt.scatter(
+    embeddings[:, 0],
+    embeddings[:, 1],
+    cmap="rainbow",
+    c=example_labels,
+    alpha=0.8,
+    s=3,
+)
+plt.colorbar()
+plt.show()
+# Get the range of the existing embeddings
+mins, maxs = np.min(embeddings, axis=0), np.max(embeddings, axis=0)
+
+# Sample some points in the latent space
+grid_width, grid_height = (6, 3)
+sample = np.random.uniform(
+    mins, maxs, size=(grid_width * grid_height, EMBEDDING_DIM)
+)
+# Decode the sampled points
+reconstructions = decoder.predict(sample)
+# Draw a plot of...
+figsize = 8
+plt.figure(figsize=(figsize, figsize))
+
+# ... the original embeddings ...
+plt.scatter(embeddings[:, 0], embeddings[:, 1], c="black", alpha=0.5, s=2)
+
+# ... and the newly generated points in the latent space
+plt.scatter(sample[:, 0], sample[:, 1], c="#00B0F0", alpha=1, s=40)
+plt.show()
+
+# Add underneath a grid of the decoded images
+fig = plt.figure(figsize=(figsize, grid_height * 2))
+fig.subplots_adjust(hspace=0.4, wspace=0.4)
+
+for i in range(grid_width * grid_height):
+    ax = fig.add_subplot(grid_height, grid_width, i + 1)
+    ax.axis("off")
+    ax.text(
+        0.5,
+        -0.35,
+        str(np.round(sample[i, :], 1)),
+        fontsize=10,
+        ha="center",
+        transform=ax.transAxes,
+    )
+    ax.imshow(reconstructions[i, :, :], cmap="Greys")
+# Colour the embeddings by their label (clothing type - see table)
+figsize = 12
+grid_size = 15
+plt.figure(figsize=(figsize, figsize))
+plt.scatter(
+    embeddings[:, 0],
+    embeddings[:, 1],
+    cmap="rainbow",
+    c=example_labels,
+    alpha=0.8,
+    s=300,
+)
+plt.colorbar()
+
+x = np.linspace(min(embeddings[:, 0]), max(embeddings[:, 0]), grid_size)
+y = np.linspace(max(embeddings[:, 1]), min(embeddings[:, 1]), grid_size)
+xv, yv = np.meshgrid(x, y)
+xv = xv.flatten()
+yv = yv.flatten()
+grid = np.array(list(zip(xv, yv)))
+
+reconstructions = decoder.predict(grid)
+# plt.scatter(grid[:, 0], grid[:, 1], c="black", alpha=1, s=10)
+plt.show()
+
+fig = plt.figure(figsize=(figsize, figsize))
+fig.subplots_adjust(hspace=0.4, wspace=0.4)
+for i in range(grid_size**2):
+    ax = fig.add_subplot(grid_size, grid_size, i + 1)
+    ax.axis("off")
+    ax.imshow(reconstructions[i, :, :], cmap="Greys")
